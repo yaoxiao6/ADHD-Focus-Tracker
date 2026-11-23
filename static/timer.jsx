@@ -2,7 +2,7 @@
 (function (FT) {
   const { useState } = React;
 
-  function TaskCard({ task, secs, running, sessionSecs, onStart, onRename, onColor, onArchive }) {
+  function TaskCard({ task, tags, act, secs, running, sessionSecs, onStart, onRename, onColor, onArchive }) {
     const [editing, setEditing] = useState(false);
     const [name, setName] = useState(task.name);
     const isRelax = !!task.is_system;
@@ -51,6 +51,7 @@
             </span>
           )}
         </div>
+        {!isRelax && <FT.TagChips task={task} tags={tags} act={act} />}
         <div className="clock mono">{FT.hms(secs)}</div>
         <div className="sub">
           {running ? <>● running · this session {FT.hms(sessionSecs)}</> : <>today</>}
@@ -74,10 +75,9 @@
   }
 
   FT.TimerView = function TimerView({ state, elapsed, act }) {
-    const { tasks, running, today, now } = state;
-    const runningSessionSecs = now - Math.max(running.start_ts, 0) + elapsed;
-    const usedColors = new Set(tasks.map((t) => t.color));
-    const nextColor = FT.PALETTE.find((c) => !usedColors.has(c)) || FT.PALETTE[tasks.length % FT.PALETTE.length];
+    const { tasks, tags, running, today, now } = state;
+    const runningSessionSecs = now - running.start_ts + elapsed;
+    const nextColor = FT.nextColor(tasks);
     const runningTask = tasks.find((t) => t.id === running.task_id);
 
     return (
@@ -103,6 +103,8 @@
               <TaskCard
                 key={t.id}
                 task={t}
+                tags={tags}
+                act={act}
                 running={isRunning}
                 secs={(today[t.id] || 0) + (isRunning ? elapsed : 0)}
                 sessionSecs={runningSessionSecs}

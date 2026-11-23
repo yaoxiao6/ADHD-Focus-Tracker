@@ -11,7 +11,9 @@
 //   day:      {date, range:[from,to]}         the selected local day
 //   week:     [{label, date, range}] x 7     Mon..Sun containing that day
 //   sessions: [{id, task_id, start_ts, end_ts, running}]  covering the week (open one ends at `now`)
-//   tasks:    all tasks incl. archived;  taskById: {id: task}
+//   tasks:    all tasks incl. archived (each has tag_ids);  taskById: {id: task}
+//   tags:     all tags;  tagById: {id: tag}
+//   buckets:  FT.agg.buildBuckets(tasks, tags): group-by-tag helper (see aggregate.js)
 //   now, firstTs (first session ever, epoch secs)
 (function (FT) {
   FT.analyses = [];

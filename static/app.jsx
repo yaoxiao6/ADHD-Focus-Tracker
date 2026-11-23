@@ -67,8 +67,13 @@
           </nav>
         </header>
         {err && <div className="error">{err}</div>}
-        {state && tab === "timer" && <FT.TimerView state={state} elapsed={elapsed} act={act} />}
-        {tab === "analytics" && <FT.AnalyticsView refreshKey={state && state.running.id} />}
+        <div className="layout">
+          {state && <FT.TagSidebar tags={state.tags} tasks={state.tasks} act={act} />}
+          <main>
+            {state && tab === "timer" && <FT.TimerView state={state} elapsed={elapsed} act={act} />}
+            {tab === "analytics" && <FT.AnalyticsView refreshKey={state && state.now} />}
+          </main>
+        </div>
       </div>
     );
   }

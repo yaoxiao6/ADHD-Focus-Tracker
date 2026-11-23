@@ -43,7 +43,7 @@ button:hover:not(:disabled) { border-color: var(--muted); }
 button:disabled { opacity: .45; cursor: default; }
 input { font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; }
 
-.app { max-width: 1100px; margin: 0 auto; padding: 20px 16px 60px; }
+.app { max-width: 1280px; margin: 0 auto; padding: 20px 16px 60px; }
 header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
 h1 { font-size: 22px; margin: 0; letter-spacing: -.01em; }
 nav { display: flex; gap: 4px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 3px; }
@@ -98,3 +98,36 @@ table.totals { width: 100%; border-collapse: collapse; }
 .totals th, .totals td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--grid); }
 .totals th { color: var(--muted); font-weight: 500; font-size: 13px; }
 .totals tfoot td { font-weight: 600; border-bottom: none; }
+
+/* ---- layout + tags (v0.0.2) ---- */
+.layout { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 18px; align-items: start; }
+@media (max-width: 760px) { .layout { grid-template-columns: 1fr; } }
+.sidebar { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; position: sticky; top: 16px; }
+.sidebar h3 { margin: 0 0 8px; font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.tag-list { list-style: none; margin: 0 0 10px; padding: 0; }
+.tag-row { display: flex; align-items: center; gap: 8px; padding: 5px 4px; border-radius: 6px; min-height: 32px; }
+.tag-row:hover { background: var(--bg); }
+.tag-row:hover .actions { opacity: 1; }
+.tag-row .count { font-size: 12px; font-variant-numeric: tabular-nums; }
+.tag-add { display: flex; gap: 6px; }
+.tag-add input { flex: 1; min-width: 0; }
+.small { font-size: 13px; }
+.note { font-size: 12px; color: var(--muted); margin: 8px 0 0; }
+
+.chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; min-height: 22px; }
+.chip {
+  font-size: 12px; line-height: 1; padding: 4px 8px; border-radius: 999px;
+  background: color-mix(in srgb, var(--chip) 18%, var(--surface)); color: var(--text);
+  border: 1px solid color-mix(in srgb, var(--chip) 45%, var(--surface));
+}
+.add-chip { --chip: var(--muted); background: transparent; border-style: dashed; color: var(--muted); cursor: pointer; }
+.picker { position: relative; }
+.backdrop { position: fixed; inset: 0; z-index: 10; cursor: default; }
+.popover {
+  position: absolute; z-index: 11; top: calc(100% + 4px); left: 0; min-width: 180px; max-height: 260px; overflow: auto;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 6px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.14); cursor: default;
+}
+.pick-row { display: flex; align-items: center; gap: 6px; padding: 5px 6px; border-radius: 6px; cursor: pointer; font-size: 14px; white-space: nowrap; }
+.pick-row:hover { background: var(--bg); }
+.pick-row .dot { margin-right: 0; }

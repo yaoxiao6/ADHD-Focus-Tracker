@@ -18,18 +18,53 @@
     return out;
   }
 
-  // days: [{range:[from,to]}] -> array of {task_id: seconds}, one per day.
-  function sumByTaskPerDay(sessions, days) {
-    return days.map((d) => sumByTask(sessions, d.range[0], d.range[1]));
+  // ---- Buckets: what analytics group by (currently tags) ----
+  // A bucket is {key, name, color, kind: "tag" | "relax" | "untagged"}.
+  // The Relax task -> "relax"; a task with tags -> one bucket per tag; else "untagged".
+  function buildBuckets(tasks, tags) {
+    const info = {
+      relax: { key: "relax", name: "Relax", color: (tasks.find((t) => t.is_system) || {}).color || "#8a9a8f", kind: "relax" },
+      untagged: { key: "untagged", name: "Untagged", color: FT.UNTAGGED_COLOR, kind: "untagged" },
+    };
+    for (const g of tags) info["tag:" + g.id] = { key: "tag:" + g.id, name: g.name, color: g.color, kind: "tag" };
+    const byTask = {};
+    for (const t of tasks) {
+      const keys = t.is_system ? ["relax"]
+        : (t.tag_ids || []).map((id) => "tag:" + id).filter((k) => info[k]);
+      byTask[t.id] = keys.length ? keys : ["untagged"];
+    }
+    return {
+      info,
+      keysOf: (taskId) => byTask[taskId] || ["untagged"],
+    };
   }
 
-  // Sorted [{task, secs}] for a totals map; Relax first, then by time desc.
-  function rankTotals(totals, taskById) {
+  // {bucketKey: seconds} within [from, to).
+  // split=false: a task with N tags credits its full time to each tag (bars, lines, tables).
+  // split=true:  time is divided evenly across its tags, so totals add up (pie charts).
+  function sumByBucket(sessions, from, to, B, split = false) {
+    const out = {};
+    for (const [taskId, secs] of Object.entries(sumByTask(sessions, from, to))) {
+      const keys = B.keysOf(Number(taskId));
+      const share = split ? secs / keys.length : secs;
+      for (const k of keys) out[k] = (out[k] || 0) + share;
+    }
+    return out;
+  }
+
+  // days: [{range:[from,to]}] -> array of {bucketKey: seconds}, one per day.
+  function sumByBucketPerDay(sessions, days, B, split = false) {
+    return days.map((d) => sumByBucket(sessions, d.range[0], d.range[1], B, split));
+  }
+
+  const KIND_ORDER = { relax: 0, tag: 1, untagged: 2 };
+  // Sorted [{bucket, secs}]: Relax first, tags by time desc, Untagged last.
+  function rankBuckets(totals, B) {
     return Object.entries(totals)
-      .map(([id, secs]) => ({ task: taskById[id], secs }))
-      .filter((r) => r.task)
-      .sort((a, b) => (b.task.is_system - a.task.is_system) || (b.secs - a.secs));
+      .map(([k, secs]) => ({ bucket: B.info[k], secs }))
+      .filter((r) => r.bucket && r.secs > 0)
+      .sort((a, b) => (KIND_ORDER[a.bucket.kind] - KIND_ORDER[b.bucket.kind]) || (b.secs - a.secs));
   }
 
-  FT.agg = { clip, sumByTask, sumByTaskPerDay, rankTotals };
+  FT.agg = { clip, sumByTask, buildBuckets, sumByBucket, sumByBucketPerDay, rankBuckets };
 })(window.FT);

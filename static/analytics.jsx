@@ -20,7 +20,13 @@
     if (err) body = <div className="error">{err}</div>;
     else if (data) {
       const taskById = Object.fromEntries(data.tasks.map((t) => [t.id, t]));
-      const ctx = { day, week, sessions: data.sessions, tasks: data.tasks, taskById, now: data.now, firstTs: data.first_ts };
+      const tagById = Object.fromEntries(data.tags.map((t) => [t.id, t]));
+      const ctx = {
+        day, week, sessions: data.sessions,
+        tasks: data.tasks, taskById, tags: data.tags, tagById,
+        buckets: FT.agg.buildBuckets(data.tasks, data.tags),
+        now: data.now, firstTs: data.first_ts,
+      };
       body = (
         <div className="analyses">
           {FT.analyses.map((a) => (

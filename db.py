@@ -31,6 +31,20 @@ MIGRATIONS = [
     CREATE INDEX sessions_range ON sessions(start_ts, end_ts);
     CREATE UNIQUE INDEX one_running ON sessions((1)) WHERE end_ts IS NULL;
     """,
+    # 2: tags (many-to-many with tasks)
+    """
+    CREATE TABLE tags (
+        id         INTEGER PRIMARY KEY,
+        name       TEXT NOT NULL UNIQUE COLLATE NOCASE,
+        color      TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+    );
+    CREATE TABLE task_tags (
+        task_id INTEGER NOT NULL REFERENCES tasks(id),
+        tag_id  INTEGER NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+        PRIMARY KEY (task_id, tag_id)
+    );
+    """,
 ]
 
 
@@ -103,14 +117,17 @@ def list_tasks(conn, include_archived=False):
     if not include_archived:
         sql += " WHERE archived_at IS NULL"
     sql += " ORDER BY is_system DESC, id"
-    return [dict(r) for r in conn.execute(sql)]
+    tag_map = task_tag_map(conn)
+    return [dict(r, tag_ids=tag_map.get(r["id"], [])) for r in conn.execute(sql)]
 
 
 def get_task(conn, task_id):
     row = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
     if row is None:
         raise DBError("task not found")
-    return dict(row)
+    tag_ids = [r[0] for r in conn.execute(
+        "SELECT tag_id FROM task_tags WHERE task_id = ? ORDER BY tag_id", (task_id,))]
+    return dict(row, tag_ids=tag_ids)
 
 
 def create_task(conn, name, color, ts=None):
@@ -160,6 +177,81 @@ def archive_task(conn, task_id, ts=None):
         if running["task_id"] == task_id:
             _switch(conn, relax_id(conn), ts)
         conn.execute("UPDATE tasks SET archived_at = ? WHERE id = ?", (ts, task_id))
+        conn.execute("COMMIT")
+    except Exception:
+        conn.execute("ROLLBACK")
+        raise
+    return get_task(conn, task_id)
+
+
+# ---------- tags ----------
+# Tag assignment is current-state, not historical: analytics attribute a task's whole
+# history to the tags it has now. Deleting a tag removes it from every task.
+
+def list_tags(conn):
+    return [dict(r) for r in conn.execute("SELECT * FROM tags ORDER BY name COLLATE NOCASE")]
+
+
+def get_tag(conn, tag_id):
+    row = conn.execute("SELECT * FROM tags WHERE id = ?", (tag_id,)).fetchone()
+    if row is None:
+        raise DBError("tag not found")
+    return dict(row)
+
+
+def create_tag(conn, name, color, ts=None):
+    name = (name or "").strip()
+    if not name:
+        raise DBError("name required")
+    try:
+        cur = conn.execute("INSERT INTO tags (name, color, created_at) VALUES (?, ?, ?)",
+                           (name, color or "#4f7cff", now() if ts is None else ts))
+    except sqlite3.IntegrityError:
+        raise DBError(f"a tag named '{name}' already exists")
+    return get_tag(conn, cur.lastrowid)
+
+
+def update_tag(conn, tag_id, name=None, color=None):
+    get_tag(conn, tag_id)
+    if name is not None:
+        name = name.strip()
+        if not name:
+            raise DBError("name required")
+    try:
+        conn.execute("UPDATE tags SET name = COALESCE(?, name), color = COALESCE(?, color) WHERE id = ?",
+                     (name, color, tag_id))
+    except sqlite3.IntegrityError:
+        raise DBError(f"a tag named '{name}' already exists")
+    return get_tag(conn, tag_id)
+
+
+def delete_tag(conn, tag_id):
+    tag = get_tag(conn, tag_id)
+    conn.execute("DELETE FROM tags WHERE id = ?", (tag_id,))  # task_tags cascades
+    return tag
+
+
+def task_tag_map(conn):
+    out = {}
+    for r in conn.execute("SELECT task_id, tag_id FROM task_tags ORDER BY tag_id"):
+        out.setdefault(r["task_id"], []).append(r["tag_id"])
+    return out
+
+
+def set_task_tags(conn, task_id, tag_ids):
+    task = get_task(conn, task_id)
+    if task["is_system"]:
+        raise DBError("Relax cannot have tags")
+    if not isinstance(tag_ids, list) or not all(isinstance(t, int) for t in tag_ids):
+        raise DBError("tag_ids must be a list of integers")
+    tag_ids = sorted(set(tag_ids))
+    for t in tag_ids:
+        get_tag(conn, t)
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        conn.execute("DELETE FROM task_tags WHERE task_id = ?", (task_id,))
+        conn.executemany("INSERT INTO task_tags (task_id, tag_id) VALUES (?, ?)",
+                         [(task_id, t) for t in tag_ids])
         conn.execute("COMMIT")
     except Exception:
         conn.execute("ROLLBACK")

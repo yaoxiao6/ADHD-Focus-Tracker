@@ -1,19 +1,18 @@
 FT.registerAnalysis({
   id: "day-bar",
-  title: "Time per task (day)",
+  title: "Time per tag (day)",
   Component: ({ ctx }) => {
-    const totals = FT.agg.sumByTask(ctx.sessions, ...ctx.day.range);
-    const rows = FT.agg.rankTotals(totals, ctx.taskById);
+    const rows = FT.agg.rankBuckets(FT.agg.sumByBucket(ctx.sessions, ...ctx.day.range, ctx.buckets), ctx.buckets);
     if (!rows.length) return <FT.Empty />;
     return (
       <FT.ChartCanvas
         config={{
           type: "bar",
           data: {
-            labels: rows.map((r) => r.task.name),
+            labels: rows.map((r) => r.bucket.name),
             datasets: [{
               data: rows.map((r) => +(r.secs / 3600).toFixed(4)),
-              backgroundColor: rows.map((r) => r.task.color),
+              backgroundColor: rows.map((r) => r.bucket.color),
               borderRadius: 4,
               maxBarThickness: 48,
             }],

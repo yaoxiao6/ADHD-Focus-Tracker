@@ -75,6 +75,25 @@ class DBTest(unittest.TestCase):
         with self.assertRaises(db.DBError):
             db.create_task(self.c, "A", "#0f0")
 
+    def test_tags_crud_and_assignment(self):
+        a = db.create_task(self.c, "A", "#f00")
+        t1 = db.create_tag(self.c, "Research", "#111")
+        t2 = db.create_tag(self.c, "Coding", "#222")
+        with self.assertRaises(db.DBError):
+            db.create_tag(self.c, "research", "#333")  # case-insensitive unique
+        db.set_task_tags(self.c, a["id"], [t2["id"], t1["id"], t1["id"]])
+        self.assertEqual(db.get_task(self.c, a["id"])["tag_ids"], sorted([t1["id"], t2["id"]]))
+        db.update_tag(self.c, t1["id"], name="Reading")
+        self.assertEqual(db.get_tag(self.c, t1["id"])["name"], "Reading")
+        db.delete_tag(self.c, t2["id"])
+        self.assertEqual(db.get_task(self.c, a["id"])["tag_ids"], [t1["id"]])
+        listed = {t["id"]: t for t in db.list_tasks(self.c)}
+        self.assertEqual(listed[a["id"]]["tag_ids"], [t1["id"]])
+        with self.assertRaises(db.DBError):
+            db.set_task_tags(self.c, db.relax_id(self.c), [t1["id"]])
+        with self.assertRaises(db.DBError):
+            db.set_task_tags(self.c, a["id"], [9999])
+
     def test_migration_idempotent(self):
         db.migrate(self.c)
         db.ensure_relax(self.c)

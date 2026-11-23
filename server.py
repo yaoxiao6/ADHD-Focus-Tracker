@@ -44,6 +44,7 @@ def get_state(conn, q, body):
     return {
         "now": t,
         "tasks": db.list_tasks(conn),
+        "tags": db.list_tags(conn),
         "running": db.running(conn),
         "today": db.totals_in_range(conn, day_start, day_end, t),
     }
@@ -64,6 +65,26 @@ def delete_task(conn, q, body, tid):
     return db.archive_task(conn, int(tid))
 
 
+@route("PUT", r"/api/tasks/(\d+)/tags")
+def set_task_tags(conn, q, body, tid):
+    return db.set_task_tags(conn, int(tid), body.get("tag_ids"))
+
+
+@route("POST", r"/api/tags")
+def create_tag(conn, q, body):
+    return db.create_tag(conn, body.get("name"), body.get("color"))
+
+
+@route("PATCH", r"/api/tags/(\d+)")
+def update_tag(conn, q, body, tid):
+    return db.update_tag(conn, int(tid), body.get("name"), body.get("color"))
+
+
+@route("DELETE", r"/api/tags/(\d+)")
+def delete_tag(conn, q, body, tid):
+    return db.delete_tag(conn, int(tid))
+
+
 @route("POST", r"/api/start/(\d+)")
 def start(conn, q, body, tid):
     return db.switch_to(conn, int(tid))
@@ -80,6 +101,7 @@ def sessions(conn, q, body):
         "now": db.now(),
         "first_ts": db.first_session_ts(conn),
         "tasks": db.list_tasks(conn, include_archived=True),
+        "tags": db.list_tags(conn),
         "sessions": db.sessions_in_range(conn, _int(q, "from"), _int(q, "to")),
     }
 
@@ -142,6 +164,9 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_DELETE(self):
         self._api("DELETE")
+
+    def do_PUT(self):
+        self._api("PUT")
 
 
 def main():

@@ -18,6 +18,10 @@ window.FT = window.FT || {};
     createTask: (name, color) => req("POST", "/api/tasks", { name, color }),
     updateTask: (id, patch) => req("PATCH", `/api/tasks/${id}`, patch),
     archiveTask: (id) => req("DELETE", `/api/tasks/${id}`),
+    setTaskTags: (id, tagIds) => req("PUT", `/api/tasks/${id}/tags`, { tag_ids: tagIds }),
+    createTag: (name, color) => req("POST", "/api/tags", { name, color }),
+    updateTag: (id, patch) => req("PATCH", `/api/tags/${id}`, patch),
+    deleteTag: (id) => req("DELETE", `/api/tags/${id}`),
     start: (id) => req("POST", `/api/start/${id}`),
     stop: () => req("POST", "/api/stop"),
     sessions: (from, to) => req("GET", `/api/sessions?from=${from}&to=${to}`),
@@ -67,4 +71,11 @@ window.FT = window.FT || {};
 
   FT.PALETTE = ["#4f7cff", "#e8590c", "#2f9e44", "#ae3ec9", "#f59f00", "#1098ad", "#e64980", "#5c7cfa", "#74b816", "#d6336c"];
   FT.UNTRACKED_COLOR = "#d0d4d9";
+  FT.UNTAGGED_COLOR = "#a3a9b1";
+
+  // First palette color not already used by `items` (each with .color).
+  FT.nextColor = (items) => {
+    const used = new Set(items.map((x) => x.color));
+    return FT.PALETTE.find((c) => !used.has(c)) || FT.PALETTE[items.length % FT.PALETTE.length];
+  };
 })(window.FT);
