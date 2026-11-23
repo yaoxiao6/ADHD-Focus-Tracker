@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ADHD Focus Tracker</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="root"></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.24.7/babel.min.js"></script>
+
+  <!-- Load order matters. Everything shares the window.FT namespace. -->
+  <script src="lib/util.js"></script>
+  <script src="analytics/aggregate.js"></script>
+  <script src="analytics/registry.js"></script>
+  <script type="text/babel" data-presets="react" src="lib/chart.jsx"></script>
+  <!-- Analyses: add a file here + it self-registers via FT.registerAnalysis -->
+  <script type="text/babel" data-presets="react" src="analytics/dayBar.jsx"></script>
+  <script type="text/babel" data-presets="react" src="analytics/dayPie.jsx"></script>
+  <script type="text/babel" data-presets="react" src="analytics/weekLine.jsx"></script>
+  <script type="text/babel" data-presets="react" src="analytics/dayTable.jsx"></script>
+  <!-- Views -->
+  <script type="text/babel" data-presets="react" src="timer.jsx"></script>
+  <script type="text/babel" data-presets="react" src="analytics.jsx"></script>
+  <script type="text/babel" data-presets="react" src="app.jsx"></script>
+</body>
+</html>
