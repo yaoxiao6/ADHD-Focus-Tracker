@@ -4,6 +4,8 @@
 
   function App() {
     const [tab, setTab] = useState(() => {
+      const fromHash = location.hash.slice(1);
+      if (["timer", "history", "analytics"].includes(fromHash)) return fromHash;
       try { return localStorage.getItem("ft.tab") || "timer"; } catch { return "timer"; }
     });
     const [state, setState] = useState(null);
@@ -46,7 +48,10 @@
       };
     }, [load]);
 
-    useEffect(() => { try { localStorage.setItem("ft.tab", tab); } catch {} }, [tab]);
+    useEffect(() => {
+      try { localStorage.setItem("ft.tab", tab); } catch {}
+      history.replaceState(null, "", "#" + tab);
+    }, [tab]);
 
     const elapsed = state ? Math.max(0, Math.floor(Date.now() / 1000 - fetchedAt.current)) : 0;
 
@@ -63,6 +68,7 @@
           <h1>Focus</h1>
           <nav>
             <button className={tab === "timer" ? "on" : ""} onClick={() => setTab("timer")}>Timer</button>
+            <button className={tab === "history" ? "on" : ""} onClick={() => setTab("history")}>History</button>
             <button className={tab === "analytics" ? "on" : ""} onClick={() => setTab("analytics")}>Analytics</button>
           </nav>
         </header>
@@ -71,6 +77,7 @@
           {state && <FT.TagSidebar tags={state.tags} tasks={state.tasks} act={act} />}
           <main>
             {state && tab === "timer" && <FT.TimerView state={state} elapsed={elapsed} act={act} />}
+            {state && tab === "history" && <FT.HistoryView tasks={state.tasks} reload={load} refreshKey={state.now} />}
             {tab === "analytics" && <FT.AnalyticsView refreshKey={state && state.now} />}
           </main>
         </div>

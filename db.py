@@ -330,3 +330,134 @@ def totals_in_range(conn, start, end, ts=None):
 def first_session_ts(conn):
     row = conn.execute("SELECT MIN(start_ts) AS t FROM sessions").fetchone()
     return row["t"]
+
+
+# ---------- history editing ----------
+# Every edit is "from a to b I was doing X" (paint) or "put back exactly these sessions"
+# (restore, used for move + undo). Both keep the log free of overlaps, keep at most one
+# open session, and never touch the future.
+
+def _clear_range(conn, a, b, ts):
+    """Remove all coverage of [a, b): delete, trim or split overlapping sessions."""
+    rows = conn.execute(
+        "SELECT * FROM sessions WHERE start_ts < ? AND COALESCE(end_ts, ?) > ? ORDER BY start_ts",
+        (b, ts, a),
+    ).fetchall()
+    for r in rows:
+        s, is_open = r["start_ts"], r["end_ts"] is None
+        e = ts if is_open else r["end_ts"]
+        if s >= a and e <= b:                     # fully inside
+            conn.execute("DELETE FROM sessions WHERE id = ?", (r["id"],))
+        elif s < a and e > b:                     # straddles: split in two
+            conn.execute("UPDATE sessions SET end_ts = ? WHERE id = ?", (a, r["id"]))
+            conn.execute("INSERT INTO sessions (task_id, start_ts, end_ts) VALUES (?, ?, ?)",
+                         (r["task_id"], b, None if is_open else e))
+        elif s < a:                               # crosses left edge
+            conn.execute("UPDATE sessions SET end_ts = ? WHERE id = ?", (a, r["id"]))
+        else:                                     # crosses right edge
+            conn.execute("UPDATE sessions SET start_ts = ? WHERE id = ?", (b, r["id"]))
+
+
+def _has_open(conn):
+    return conn.execute("SELECT 1 FROM sessions WHERE end_ts IS NULL").fetchone() is not None
+
+
+def _insert(conn, task_id, a, b, ts):
+    """Insert [a, b); if it reaches `now` and nothing else is running, it becomes the running one."""
+    if b >= ts and not _has_open(conn):
+        conn.execute("INSERT INTO sessions (task_id, start_ts) VALUES (?, ?)", (task_id, a))
+    else:
+        conn.execute("INSERT INTO sessions (task_id, start_ts, end_ts) VALUES (?, ?, ?)",
+                     (task_id, a, min(b, ts)))
+
+
+def _normalize(conn, a, b, ts):
+    """Drop zero-length sessions and merge touching same-task neighbours around [a, b]."""
+    conn.execute("DELETE FROM sessions WHERE end_ts IS NOT NULL AND end_ts <= start_ts")
+    rows = conn.execute(
+        "SELECT * FROM sessions WHERE start_ts <= ? AND COALESCE(end_ts, ?) >= ? ORDER BY start_ts",
+        (b, ts, a),
+    ).fetchall()
+    prev = None
+    for r in rows:
+        r = dict(r)
+        if prev and prev["task_id"] == r["task_id"] and prev["end_ts"] == r["start_ts"]:
+            conn.execute("DELETE FROM sessions WHERE id = ?", (r["id"],))
+            conn.execute("UPDATE sessions SET end_ts = ? WHERE id = ?", (r["end_ts"], prev["id"]))
+            prev["end_ts"] = r["end_ts"]
+        else:
+            prev = r
+
+
+def _check_task(conn, task_id):
+    task = get_task(conn, task_id)
+    if task["archived_at"] is not None:
+        raise DBError(f"task '{task['name']}' is archived")
+    return task
+
+
+def _tx(conn, fn):
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        out = fn()
+        if not _has_open(conn):  # should be impossible; refuse to break the invariant
+            raise DBError("edit would leave nothing running")
+        conn.execute("COMMIT")
+        return out
+    except Exception:
+        conn.execute("ROLLBACK")
+        raise
+
+
+def paint(conn, task_id, a, b, ts=None):
+    """Record that [a, b) was spent on task_id, overwriting whatever was there."""
+    ts = now() if ts is None else ts
+    a, b = int(a), int(b)
+    _check_task(conn, task_id)
+    if a >= ts:
+        raise DBError("cannot edit the future")
+    b = min(b, ts)
+    if a >= b:
+        raise DBError("start must be before end")
+
+    def run():
+        _clear_range(conn, a, b, ts)
+        _insert(conn, task_id, a, b, ts)
+        _normalize(conn, a, b, ts)
+        return sessions_in_range(conn, a, b, ts)
+    return _tx(conn, run)
+
+
+def restore(conn, a, b, items, ts=None):
+    """Replace [a, b) with `items` [{task_id, start_ts, end_ts}] (all inside the range).
+
+    An item with end_ts None means "still running": the range then extends to now.
+    """
+    ts = now() if ts is None else ts
+    a, b = int(a), int(b)
+    if not isinstance(items, list):
+        raise DBError("sessions must be a list")
+    if a >= ts:
+        raise DBError("cannot edit the future")
+    items = sorted(items, key=lambda x: int(x["start_ts"]))
+    if any(x.get("end_ts") is None for x in items[:-1]):
+        raise DBError("only the last session may be open")
+    open_last = bool(items) and items[-1].get("end_ts") is None
+    b = ts if open_last else min(b, ts)
+    last_end = a
+    for x in items:
+        _check_task(conn, int(x["task_id"]))
+        s = int(x["start_ts"])
+        e = b if x.get("end_ts") is None else min(int(x["end_ts"]), ts)
+        if s < last_end or e > b or s >= e:
+            raise DBError("sessions must be ordered, non-overlapping and inside the range")
+        last_end = e
+
+    def run():
+        _clear_range(conn, a, b, ts)
+        for x in items:
+            e = b if x.get("end_ts") is None else min(int(x["end_ts"]), ts)
+            _insert(conn, int(x["task_id"]), int(x["start_ts"]), e, ts)
+        _normalize(conn, a, b, ts)
+        return sessions_in_range(conn, a, b, ts)
+    return _tx(conn, run)

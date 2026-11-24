@@ -94,6 +94,109 @@ class DBTest(unittest.TestCase):
         with self.assertRaises(db.DBError):
             db.set_task_tags(self.c, a["id"], [9999])
 
+    # ---------- history editing ----------
+
+    def timeline(self):
+        """[(task_name, start, end|None)] ordered; asserts invariants."""
+        rows = self.c.execute(
+            "SELECT t.name, s.start_ts, s.end_ts FROM sessions s JOIN tasks t ON t.id=s.task_id ORDER BY s.start_ts"
+        ).fetchall()
+        self.assertEqual(self.open_count(), 1)
+        self.assertIsNone(rows[-1][2], "open session must be last")
+        for p, n in zip(rows, rows[1:]):
+            self.assertLessEqual(p[2], n[1], "overlap")
+            self.assertLess(p[1], p[2], "zero/negative length")
+        return [tuple(r) for r in rows]
+
+    def seed(self, *segments):
+        """segments: (task_id, start, end|None) contiguous; replaces all sessions."""
+        self.c.execute("DELETE FROM sessions")
+        for tid, s, e in segments:
+            self.c.execute("INSERT INTO sessions (task_id, start_ts, end_ts) VALUES (?,?,?)", (tid, s, e))
+
+    def setup_tasks(self):
+        self.R = db.relax_id(self.c)
+        self.W = db.create_task(self.c, "Work", "#f00")["id"]
+        self.G = db.create_task(self.c, "Go out", "#0f0")["id"]
+
+    def test_forgot_to_switch_story(self):
+        # Work running since 9:00 (t=900); out 10-12; now 12:30 (t=1250).
+        self.setup_tasks()
+        self.seed((self.R, 0, 900), (self.W, 900, None))
+        db.paint(self.c, self.G, 1000, 1200, ts=1250)
+        self.assertEqual(self.timeline(), [
+            ("Relax", 0, 900), ("Work", 900, 1000), ("Go out", 1000, 1200), ("Work", 1200, None)])
+        tot = db.totals_in_range(self.c, 0, 2000, ts=1250)
+        self.assertEqual(tot[self.W], 100 + 50)
+        self.assertEqual(tot[self.G], 200)
+
+    def test_paint_over_edges_and_multiple_blocks(self):
+        self.setup_tasks()
+        self.seed((self.R, 0, 100), (self.W, 100, 200), (self.G, 200, 300), (self.R, 300, None))
+        db.paint(self.c, self.W, 150, 250, ts=1000)  # extend Work into Go out
+        self.assertEqual(self.timeline(), [
+            ("Relax", 0, 100), ("Work", 100, 250), ("Go out", 250, 300), ("Relax", 300, None)])
+        db.paint(self.c, self.G, 50, 350, ts=1000)   # swallow several blocks
+        self.assertEqual(self.timeline(), [("Relax", 0, 50), ("Go out", 50, 350), ("Relax", 350, None)])
+
+    def test_delete_block_merges_relax(self):
+        self.setup_tasks()
+        self.seed((self.R, 0, 100), (self.W, 100, 200), (self.R, 200, None))
+        db.paint(self.c, self.R, 100, 200, ts=500)
+        self.assertEqual(self.timeline(), [("Relax", 0, None)])
+
+    def test_paint_to_now_becomes_running(self):
+        self.setup_tasks()
+        self.seed((self.R, 0, 100), (self.W, 100, None))
+        db.paint(self.c, self.G, 150, 99999, ts=300)  # end clamped to now
+        self.assertEqual(self.timeline(), [("Relax", 0, 100), ("Work", 100, 150), ("Go out", 150, None)])
+        self.assertEqual(db.running(self.c)["task_id"], self.G)
+
+    def test_paint_rejections(self):
+        self.setup_tasks()
+        self.seed((self.R, 0, None))
+        with self.assertRaises(db.DBError):
+            db.paint(self.c, self.W, 600, 700, ts=500)   # future
+        with self.assertRaises(db.DBError):
+            db.paint(self.c, self.W, 200, 200, ts=500)   # zero length
+        db.archive_task(self.c, self.G, 10)
+        with self.assertRaises(db.DBError):
+            db.paint(self.c, self.G, 100, 200, ts=500)   # archived
+        self.timeline()
+
+    def test_paint_before_first_session_leaves_gap(self):
+        self.setup_tasks()
+        self.seed((self.R, 1000, None))
+        db.paint(self.c, self.W, 100, 200, ts=2000)
+        self.assertEqual(self.timeline(), [("Work", 100, 200), ("Relax", 1000, None)])
+
+    def test_restore_roundtrip_undo(self):
+        self.setup_tasks()
+        self.seed((self.R, 0, 900), (self.W, 900, None))
+        before = [dict(task_id=self.R, start_ts=500, end_ts=900), dict(task_id=self.W, start_ts=900, end_ts=None)]
+        db.paint(self.c, self.G, 600, 1200, ts=1200)   # Go out now running
+        self.assertEqual(db.running(self.c)["task_id"], self.G)
+        db.restore(self.c, 500, 1200, before, ts=1300)  # undo, a bit later
+        self.assertEqual(self.timeline(), [("Relax", 0, 900), ("Work", 900, None)])
+
+    def test_restore_move_block(self):
+        self.setup_tasks()
+        self.seed((self.R, 0, 100), (self.W, 100, 200), (self.R, 200, None))
+        db.restore(self.c, 100, 400, [
+            dict(task_id=self.R, start_ts=100, end_ts=250),
+            dict(task_id=self.W, start_ts=250, end_ts=350),
+            dict(task_id=self.R, start_ts=350, end_ts=400)], ts=1000)
+        self.assertEqual(self.timeline(), [("Relax", 0, 250), ("Work", 250, 350), ("Relax", 350, None)])
+        with self.assertRaises(db.DBError):
+            db.restore(self.c, 0, 100, [dict(task_id=self.W, start_ts=50, end_ts=150)], ts=1000)
+
+    def test_switch_after_edit_still_works(self):
+        self.setup_tasks()
+        self.seed((self.R, 0, 100), (self.W, 100, None))
+        db.paint(self.c, self.G, 150, 200, ts=300)
+        db.switch_to(self.c, self.G, 400)
+        self.assertEqual(self.timeline()[-2:], [("Work", 200, 400), ("Go out", 400, None)])
+
     def test_migration_idempotent(self):
         db.migrate(self.c)
         db.ensure_relax(self.c)

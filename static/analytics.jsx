@@ -14,8 +14,6 @@
       FT.api.sessions(week[0].range[0], week[6].range[1]).then(setData, (e) => setErr(e.message));
     }, [week, refreshKey]);
 
-    const shift = (n) => setDate(new Date(date.getFullYear(), date.getMonth(), date.getDate() + n));
-
     let body = <FT.Empty>Loading…</FT.Empty>;
     if (err) body = <div className="error">{err}</div>;
     else if (data) {
@@ -42,12 +40,7 @@
     return (
       <div>
         <div className="toolbar">
-          <div className="datepick">
-            <button onClick={() => shift(-1)}>‹</button>
-            <input type="date" value={FT.isoDate(date)} onChange={(e) => e.target.value && setDate(FT.parseIsoDate(e.target.value))} />
-            <button onClick={() => shift(1)}>›</button>
-            <button onClick={() => setDate(new Date())}>Today</button>
-          </div>
+          <FT.DatePicker date={date} onChange={setDate} />
           <span className="muted">
             Week {FT.isoDate(week[0].date)} → {FT.isoDate(week[6].date)}
           </span>

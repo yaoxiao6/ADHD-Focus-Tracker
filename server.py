@@ -95,6 +95,22 @@ def stop(conn, q, body):
     return db.stop_all(conn)
 
 
+@route("POST", r"/api/paint")
+def paint(conn, q, body):
+    try:
+        return db.paint(conn, int(body["task_id"]), int(body["start_ts"]), int(body["end_ts"]))
+    except (KeyError, TypeError, ValueError):
+        raise db.DBError("task_id, start_ts, end_ts (ints) required")
+
+
+@route("POST", r"/api/restore")
+def restore(conn, q, body):
+    try:
+        return db.restore(conn, int(body["from"]), int(body["to"]), body["sessions"])
+    except (KeyError, TypeError, ValueError):
+        raise db.DBError("from, to (ints) and sessions required")
+
+
 @route("GET", r"/api/sessions")
 def sessions(conn, q, body):
     return {

@@ -12,6 +12,18 @@ number of tags with its `+ tag` chip. **Analytics group time by tag, not by task
 - Relax is always its own group. Tasks without tags show up as **Untagged**.
 - Tags are current state, not history: retagging a task (or deleting a tag) regroups that task's past time too.
 
+**History** tab: fix the past when you forgot to switch cards. Pick a day and you see it as a timeline bar:
+
+- Drag on empty space to add a session, then choose which existing card it belongs to.
+- Drag a block to move it. Drag its edges to resize it.
+- Click a block (or a row in the list) to set exact start and end times (seconds) or change its card.
+- Delete turns the time back into Relax. Empty track means Relax; hatched means untracked or the future.
+- Undo: the ↶ button or ⌘Z. Zoom: 24h, 12h, 6h, 2h. Drags snap to 1 minute; hold ⌥ for seconds.
+
+Edits overwrite whatever was in that time range. Card totals and analytics update immediately.
+Example: Work has been running since 9:00 and you were out 10–12. Add "Go out" over 10:00–12:00.
+The result is Work 9–10, Go out 10–12, and Work 12–now, still running.
+
 ## Run
 
 ```bash
@@ -35,6 +47,8 @@ static/
   app.jsx              shell, tabs, 1s tick
   timer.jsx            stopwatch cards + CRUD
   tags.jsx             tag sidebar (CRUD) + per-card tag picker
+  history.jsx          day timeline editor (drag/resize/create, exact-time form, undo)
+  lib/datepicker.jsx   shared ‹ date › Today control
   analytics.jsx        date picker; renders every registered analysis
   analytics/aggregate.js   clip / sumByTask / buildBuckets / sumByBucket(PerDay) / rankBuckets
   analytics/registry.js    FT.registerAnalysis + ctx documentation
@@ -89,6 +103,15 @@ import sqlite3, pandas as pd
 df = pd.read_sql("SELECT s.*, t.name FROM sessions s JOIN tasks t ON t.id=s.task_id",
                  sqlite3.connect("focus.db"))
 ```
+
+## History editing API
+
+- `POST /api/paint {task_id, start_ts, end_ts}`: "I was doing X from a to b". It trims or splits whatever
+  overlapped that range and merges touching sessions of the same task. Painting up to now makes X the running card.
+- `POST /api/restore {from, to, sessions:[{task_id, start_ts, end_ts|null}]}`: replaces a range exactly.
+  The History tab uses it for move and undo. A final `end_ts: null` means "still running".
+
+Neither can touch the future. There is never any overlap, and exactly one session stays running.
 
 ## Behavior notes
 

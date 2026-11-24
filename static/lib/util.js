@@ -25,6 +25,8 @@ window.FT = window.FT || {};
     start: (id) => req("POST", `/api/start/${id}`),
     stop: () => req("POST", "/api/stop"),
     sessions: (from, to) => req("GET", `/api/sessions?from=${from}&to=${to}`),
+    paint: (taskId, start, end) => req("POST", "/api/paint", { task_id: taskId, start_ts: start, end_ts: end }),
+    restore: (from, to, sessions) => req("POST", "/api/restore", { from, to, sessions }),
   };
 
   const pad = (n) => String(n).padStart(2, "0");
@@ -61,6 +63,17 @@ window.FT = window.FT || {};
       const d = new Date(date.getFullYear(), date.getMonth(), date.getDate() - offset + i);
       return { label, date: d, range: FT.dayRange(d) };
     });
+  };
+
+  // epoch secs -> "HH:MM:SS" local clock time; and back, relative to a local day start.
+  FT.clock = (ts) => {
+    const d = new Date(ts * 1000);
+    return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  };
+  FT.clockToTs = (dayStart, hhmmss) => {
+    const [h, m, s] = hhmmss.split(":").map(Number);
+    const d = new Date(dayStart * 1000);
+    return Math.floor(new Date(d.getFullYear(), d.getMonth(), d.getDate(), h || 0, m || 0, s || 0).getTime() / 1000);
   };
 
   FT.isoDate = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;

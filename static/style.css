@@ -131,3 +131,68 @@ table.totals { width: 100%; border-collapse: collapse; }
 .pick-row { display: flex; align-items: center; gap: 6px; padding: 5px 6px; border-radius: 6px; cursor: pointer; font-size: 14px; white-space: nowrap; }
 .pick-row:hover { background: var(--bg); }
 .pick-row .dot { margin-right: 0; }
+
+/* ---- history editor (v0.0.3) ---- */
+.hist-controls { display: flex; align-items: center; gap: 8px; }
+.seg { display: flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.seg button { border: none; border-radius: 0; padding: 5px 10px; }
+.seg button.on { background: var(--text); color: var(--bg); }
+.hint { margin: -4px 0 10px; }
+.hist-scroll {
+  overflow-x: auto; background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 8px 0 12px;
+}
+.hist-inner { position: relative; min-width: 100%; padding: 0 12px; box-sizing: border-box; }
+.hist-ticks { position: relative; height: 20px; margin: 0 0 4px; }
+.tick { position: absolute; top: 8px; height: 12px; border-left: 1px solid var(--muted); }
+.tick.minor { top: 14px; height: 6px; opacity: .5; }
+.tick em { position: absolute; bottom: 12px; left: 0; transform: translateX(-50%); font-style: normal; font-size: 11px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.hist-track {
+  position: relative; height: 64px; border-radius: 8px; background: var(--bg);
+  cursor: crosshair; touch-action: none; user-select: none; -webkit-user-select: none;
+}
+.hist-track.busy { opacity: .6; pointer-events: none; }
+.grid-line { position: absolute; top: 0; bottom: 0; border-left: 1px solid var(--grid); }
+.hist-untracked {
+  position: absolute; top: 0; bottom: 0;
+  background: repeating-linear-gradient(135deg, transparent 0 6px, color-mix(in srgb, var(--muted) 18%, transparent) 6px 8px);
+}
+.hist-block {
+  position: absolute; top: 6px; bottom: 6px; min-width: 3px; border-radius: 6px;
+  background: color-mix(in srgb, var(--task) 78%, var(--surface)); color: #fff;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--task) 60%, #000 10%);
+  cursor: grab; overflow: hidden; display: flex; align-items: center;
+}
+.hist-block:active { cursor: grabbing; }
+.hist-block.running { background-image: linear-gradient(90deg, transparent 70%, rgba(255,255,255,.25)); }
+.hist-block.selected { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--task); z-index: 2; }
+.hist-block.dragging { opacity: .35; }
+.hist-label { flex: 1; padding: 0 10px; font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; text-shadow: 0 1px 1px rgba(0,0,0,.25); }
+.hist-label small { font-weight: 400; opacity: .85; }
+.hist-handle { position: absolute; top: 0; bottom: 0; width: 8px; cursor: ew-resize; z-index: 1; }
+.hist-handle.l { left: 0; } .hist-handle.r { right: 0; }
+.hist-handle:hover { background: rgba(255,255,255,.35); }
+.hist-ghost {
+  position: absolute; top: 2px; bottom: 2px; border-radius: 6px; pointer-events: none; z-index: 3;
+  border: 2px dashed var(--task, var(--accent)); background: color-mix(in srgb, var(--task, var(--accent)) 18%, transparent);
+}
+.hist-ghost.pending { --task: var(--accent); }
+.hist-tip {
+  position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%);
+  background: var(--text); color: var(--bg); font-size: 12px; padding: 3px 8px; border-radius: 6px; white-space: nowrap;
+}
+.hist-now { position: absolute; top: -4px; bottom: -4px; border-left: 2px solid var(--danger); z-index: 4; pointer-events: none; }
+.hist-editor {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 12px;
+  background: var(--surface); border: 1px solid var(--accent); border-radius: var(--radius); padding: 10px 14px;
+}
+.hist-editor label { display: flex; align-items: center; gap: 6px; font-size: 14px; color: var(--muted); }
+.hist-editor select { font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 5px 8px; }
+.hist-editor .spacer { flex: 1; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+button.danger { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 50%, var(--border)); }
+.hist-list { margin-top: 14px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.hist-list tbody tr { cursor: pointer; }
+.hist-list tbody tr:hover { background: var(--bg); }
+.hist-list tr.relax-row td { color: var(--muted); }
+.hist-list tr.selected { background: color-mix(in srgb, var(--accent) 12%, var(--surface)); }
